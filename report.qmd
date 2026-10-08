@@ -1,0 +1,344 @@
+---
+title: "Barcelona's historical OpenStreetMap network"
+subtitle: "Street hierarchy and traffic-related attributes for noise-complaints research"
+date: "2026-10-08"
+format:
+  html:
+    toc: true
+    toc-depth: 2
+    code-fold: true
+    theme: cosmo
+execute:
+  warning: false
+  message: false
+---
+
+## Overview
+
+This report describes Barcelona's OpenStreetMap (OSM) road and
+path network as mapped on **1 January 2017**.
+
+The dataset retains all OSM `highway` categories, including
+motor-vehicle roads, pedestrian streets, footways and cycleways.
+
+The purpose is to assess the availability and suitability of
+historical street-network attributes for research on noise
+complaints.
+
+```{r}
+#| label: setup
+#| include: false
+
+library(sf)
+library(dplyr)
+library(readr)
+library(leaflet)
+library(DT)
+library(ggplot2)
+
+roads <- st_read(
+  "outputs/barcelona_osm_roads_170101.gpkg",
+  quiet = TRUE
+)
+
+boundary <- st_read(
+  "data/barcelona_boundary.gpkg",
+  quiet = TRUE
+)
+
+quality <- read_csv(
+  "outputs/quality_summary.csv",
+  show_col_types = FALSE
+)
+
+highway_summary <- read_csv(
+  "outputs/highway_summary.csv",
+  show_col_types = FALSE
+)
+
+completeness <- read_csv(
+  "outputs/attribute_completeness_overall.csv",
+  show_col_types = FALSE
+)
+
+# Broad categories for visualisation only.
+# Original highway tags remain unchanged.
+
+roads <- roads |>
+  mutate(
+    road_group = case_when(
+      highway == "pedestrian" ~ "Pedestrian street",
+      highway %in% c(
+        "footway", "path", "steps", "bridleway",
+        "corridor", "crossing", "platform"
+      ) ~ "Pedestrian/path",
+      highway == "cycleway" ~ "Cycleway",
+      highway == "living_street" ~ "Living street",
+      highway %in% c(
+        "residential", "service", "unclassified",
+        "tertiary", "tertiary_link",
+        "secondary", "secondary_link",
+        "primary", "primary_link",
+        "trunk", "trunk_link",
+        "motorway", "motorway_link"
+      ) ~ "Motor-vehicle road",
+      TRUE ~ "Other"
+    )
+  )
+
+roads_ll <- st_transform(roads, 4326)
+boundary_ll <- st_transform(boundary, 4326)
+```
+
+## Dataset summary
+
+```{r}
+#| echo: false
+
+data.frame(
+  Metric = c(
+    "OSM snapshot",
+    "Number of features",
+    "Total mapped feature length (km)",
+    "Invalid geometries",
+    "Empty geometries"
+  ),
+  Value = c(
+    "2017-01-01",
+    format(nrow(roads), big.mark = ","),
+    round(sum(roads$length_m) / 1000, 1),
+    sum(!st_is_valid(roads)),
+    sum(st_is_empty(roads))
+  )
+) |>
+  DT::datatable(
+    rownames = FALSE,
+    options = list(dom = "t", paging = FALSE)
+  )
+```
+
+## Interactive network map
+
+The map shows the complete historical network, grouped into
+broad categories for visualisation.
+
+```{r}
+#| echo: false
+
+pal <- colorFactor(
+  palette = c(
+    "Motor-vehicle road" = "#444444",
+    "Pedestrian street" = "#E69F00",
+    "Pedestrian/path" = "#56B4E9",
+    "Cycleway" = "#009E73",
+    "Living street" = "#CC79A7",
+    "Other" = "#999999"
+  ),
+  domain = roads_ll$road_group
+)
+
+leaflet(roads_ll, options = leafletOptions(preferCanvas = TRUE)) |>
+  addProviderTiles(providers$Esri.WorldGrayCanvas) |>
+  addPolylines(
+    color = ~pal(road_group),
+    weight = 2,
+    opacity = 0.75,
+    popup = ~paste0(
+      "<b>Highway:</b> ", highway,
+      "<br><b>OSM ID:</b> ", osm_id,
+      "<br><b>Length:</b> ", round(length_m), " m"
+    ),
+    group = "Network"
+  ) |>
+  addPolylines(
+    data = boundary_ll,
+    color = "black",
+    weight = 2,
+    opacity = 0.8,
+    fill = FALSE,
+    group = "Municipal boundary"
+  ) |>
+  addLegend(
+    position = "bottomright",
+    pal = pal,
+    values = roads_ll$road_group,
+    title = "Network category"
+  ) |>
+  addLayersControl(
+    overlayGroups = c("Network", "Municipal boundary"),
+    options = layersControlOptions(collapsed = TRUE)
+  )
+```
+
+## Network composition
+
+Total mapped feature length by OSM road/path category.
+
+```{r}
+#| echo: false
+
+highway_summary |>
+  slice_max(length_km, n = 15) |>
+  mutate(highway = reorder(highway, length_km)) |>
+  ggplot(aes(x = length_km, y = highway)) +
+  geom_col(fill = "#3973A8") +
+  labs(
+    x = "Mapped length (km)",
+    y = NULL,
+    title = "Network length by OSM highway category"
+  ) +
+  theme_minimal(base_size = 12)
+```
+
+```{r}
+#| echo: false
+
+highway_summary |>
+  mutate(
+    length_km = round(length_km, 2),
+    pct_length = round(pct_length, 1)
+  ) |>
+  DT::datatable(
+    rownames = FALSE,
+    filter = "top",
+    options = list(pageLength = 15)
+  )
+```
+
+## Attribute completeness
+
+The following table compares the proportion of features with
+a recorded attribute against the proportion of mapped length
+covered by those features.
+
+```{r}
+#| echo: false
+
+completeness |>
+  select(
+    attribute,
+    pct_features,
+    pct_length
+  ) |>
+  DT::datatable(
+    rownames = FALSE,
+    options = list(dom = "t", paging = FALSE)
+  )
+```
+
+```{r}
+#| echo: false
+
+completeness |>
+  select(attribute, pct_features, pct_length) |>
+  tidyr::pivot_longer(
+    cols = c(pct_features, pct_length),
+    names_to = "measure",
+    values_to = "percentage"
+  ) |>
+  mutate(
+    measure = recode(
+      measure,
+      pct_features = "By feature count",
+      pct_length = "By mapped length"
+    )
+  ) |>
+  ggplot(
+    aes(
+      x = percentage,
+      y = reorder(attribute, percentage),
+      fill = measure
+    )
+  ) +
+  geom_col(position = "dodge") +
+  labs(
+    x = "Attributes recorded (%)",
+    y = NULL,
+    fill = NULL,
+    title = "Completeness of historical OSM attributes"
+  ) +
+  theme_minimal(base_size = 12)
+```
+
+## Pedestrian infrastructure
+
+The map below focuses on pedestrian streets, footways,
+paths and living streets.
+
+```{r}
+#| echo: false
+
+pedestrian <- roads_ll |>
+  filter(
+    road_group %in% c(
+      "Pedestrian street",
+      "Pedestrian/path",
+      "Living street"
+    )
+  )
+
+leaflet(pedestrian, options = leafletOptions(preferCanvas = TRUE)) |>
+  addProviderTiles(providers$Esri.WorldGrayCanvas) |>
+  addPolylines(
+    color = ~pal(road_group),
+    weight = 2,
+    opacity = 0.8,
+    popup = ~paste0(
+      "<b>Highway:</b> ", highway,
+      "<br><b>OSM ID:</b> ", osm_id
+    )
+  ) |>
+  addPolylines(
+    data = boundary_ll,
+    color = "black",
+    weight = 2,
+    opacity = 0.8,
+    fill = FALSE
+) |>
+  addLegend(
+    position = "bottomright",
+    pal = pal,
+    values = pedestrian$road_group,
+    title = "Pedestrian-related categories"
+  )
+```
+
+## Methodological notes
+
+### Historical representation
+
+The dataset uses the OSM state as of 1 January 2017.
+It does not necessarily represent every road or path
+that physically existed at that date.
+
+### Road hierarchy
+
+The `highway` tag describes road function and classification,
+not measured traffic volume.
+
+### Missing attributes
+
+Missing lane counts, speed limits, widths and other attributes
+should not be interpreted as zero or as evidence of absence.
+
+### Pedestrianisation
+
+The `highway=pedestrian` category is not a validated inventory
+of pedestrianised streets. Pedestrian-priority streets may also
+appear under other tags.
+
+### Network length
+
+Lengths are sums of mapped OSM geometries. Overlapping
+features may be counted more than once.
+
+### Administrative boundary
+
+The clipping boundary was obtained from current OSM data,
+rather than reconstructed from a historical administrative
+boundary.
+
+### Data attribution
+
+© OpenStreetMap contributors. OSM data is made available
+under the Open Database License (ODbL).

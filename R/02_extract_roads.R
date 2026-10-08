@@ -3,9 +3,16 @@ boundary_path <- "data/barcelona_boundary.gpkg"
 if (!file.exists(boundary_path)) stop("Run R/01_get_boundary.R first")
 boundary <- sf::st_read(boundary_path, quiet = TRUE)
 # Extract historical OSM ways; bbox limits source download, polygon clips output.
-tags <- c("highway", "lanes", "lanes:forward", "lanes:backward",
-          "maxspeed", "oneway", "access", "motor_vehicle", "vehicle",
-          "junction", "name", "surface")
+tags <- c(
+  "highway",
+  "lanes", "lanes:forward", "lanes:backward",
+  "maxspeed", "oneway",
+  "access", "motor_vehicle", "vehicle",
+  "junction", "name", "surface",
+  "width", "sidewalk", "lit",
+  "cycleway", "cycleway:left",
+  "cycleway:right", "cycleway:both"
+)
 lines <- osmextract::oe_get(
   place = region, layer = "lines", version = snapshot,
   boundary = sf::st_bbox(boundary), boundary_type = "clipsrc",

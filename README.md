@@ -1,21 +1,35 @@
-# Barcelona historical OSM road-network data
+# Barcelona historical OSM street network
 
-Exploratory, reproducible R extraction of the Barcelona municipality's OpenStreetMap street network as mapped on **1 January 2017** for research on noise complaints.
+Historical OpenStreetMap (OSM) street-network data for Barcelona, extracted for **1 January 2017**, for research on noise complaints.
 
-## Run
+## Data and outputs
+
+- `data/` — Barcelona municipal boundary and historical street-network dataset (`barcelona_osm_roads_170101.gpkg`).
+- `outputs/` — Descriptive statistics and summary tables.
+- `report.qmd` — Interactive maps and an overview of the data.
+- `R/` — Scripts to reproduce the extraction and analysis.
+
+The original OSM download is cached externally and does not need to be stored in the repository.
+
+## Reproduce the analysis
 
 From the repository root:
 
 ```r
-install.packages(c("sf", "osmdata", "osmextract", "dplyr", "readr"))
+install.packages(c("sf", "osmdata", "osmextract", "dplyr", "readr",
+                   "ggplot2", "tidyr", "leaflet", "DT"))
+
 source("R/01_get_boundary.R")
 source("R/02_extract_roads.R")
+source("R/03_explore_network.R")
 ```
 
-Output: `outputs/barcelona_osm_roads_170101.gpkg` (GeoPackage).
+To generate the interactive HTML report, run `quarto render report.qmd`.
 
-The extraction preserves original `highway`, lane, speed, one-way and access tags where present. All OSM highway types are retained initially, including footways, pedestrian streets and paths. These **are not all motor-vehicle roads**. Missing lane tags do not imply one lane; OSM road classes do not measure traffic counts.
+## Notes
 
-**Limitations:** The municipal boundary is obtained from current OSM, whereas road attributes are requested from the historical snapshot. OSM data completeness and positional accuracy have not been validated. Inspect output and historical availability before research use.
+The dataset includes all OSM `highway` categories, including pedestrian streets, footways and cycleways, alongside available road attributes such as lanes, speed limits and access restrictions.
 
-OpenStreetMap contributors ©; ODbL attribution required. Data products are not committed automatically.
+**Limitations:** Missing OSM attributes do not necessarily indicate absence. The municipal boundary comes from current OSM, while the street network uses the historical snapshot. Data accuracy has not been independently validated.
+
+© OpenStreetMap contributors (ODbL).

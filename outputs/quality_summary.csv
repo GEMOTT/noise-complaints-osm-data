@@ -1,0 +1,2 @@
+n_features,n_missing_osm_id,n_duplicated_osm_id,n_empty_geometry,n_invalid_geometry,n_zero_length,total_length_km
+16714,0,1,0,0,0,2347.717156768004
