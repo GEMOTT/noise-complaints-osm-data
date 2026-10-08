@@ -29,7 +29,7 @@ roads <- suppressWarnings(sf::st_collection_extract(roads, "LINESTRING"))
 roads$length_m <- as.numeric(sf::st_length(roads))
 roads <- roads[roads$length_m > 0, , drop = FALSE]
 roads$snapshot <- "2017-01-01"
-out <- "outputs/barcelona_osm_roads_170101.gpkg"
+out <- "data/barcelona_osm_roads_170101.gpkg"
 if (file.exists(out)) file.remove(out)
 sf::st_write(roads, out, layer = "roads", quiet = TRUE)
 message("Saved ", nrow(roads), " road/path features to ", out)

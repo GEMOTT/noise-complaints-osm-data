@@ -12,7 +12,7 @@ library(readr)
 # ------------------------------------------------------------
 
 roads <- st_read(
-  "outputs/barcelona_osm_roads_170101.gpkg",
+  "data/barcelona_osm_roads_170101.gpkg",
   quiet = TRUE
 )
 

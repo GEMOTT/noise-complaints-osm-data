@@ -37,7 +37,7 @@ library(DT)
 library(ggplot2)
 
 roads <- st_read(
-  "outputs/barcelona_osm_roads_170101.gpkg",
+  "data/barcelona_osm_roads_170101.gpkg",
   quiet = TRUE
 )
 
@@ -99,16 +99,12 @@ data.frame(
   Metric = c(
     "OSM snapshot",
     "Number of features",
-    "Total mapped feature length (km)",
-    "Invalid geometries",
-    "Empty geometries"
+    "Total mapped feature length (km)"
   ),
   Value = c(
     "2017-01-01",
     format(nrow(roads), big.mark = ","),
-    round(sum(roads$length_m) / 1000, 1),
-    sum(!st_is_valid(roads)),
-    sum(st_is_empty(roads))
+    round(sum(roads$length_m) / 1000, 1)
   )
 ) |>
   DT::datatable(
@@ -117,10 +113,52 @@ data.frame(
   )
 ```
 
+## Network composition
+
+The table presents all 27 original OSM `highway` categories,
+showing the number of features, total mapped length and
+percentage of the network.
+
+```{r}
+#| echo: false
+
+highway_summary |>
+  mutate(
+    length_km = round(length_km, 2),
+    pct_length = round(pct_length, 1)
+  ) |>
+  DT::datatable(
+    rownames = FALSE,
+    filter = "top",
+    options = list(pageLength = 15)
+  )
+```
+
+The figure visualises the mapped lengths reported in the
+table, allowing comparison across all categories.
+
+```{r}
+#| echo: false
+
+highway_summary |>
+  mutate(highway = reorder(highway, length_km)) |>
+  ggplot(aes(x = length_km, y = highway)) +
+  geom_col(fill = "#3973A8") +
+  labs(
+    x = "Mapped length (km)",
+    y = NULL,
+    title = "Network length by OSM highway category"
+  ) +
+  theme_minimal(base_size = 12)
+```
+
 ## Interactive network map
 
-The map shows the complete historical network, grouped into
-broad categories for visualisation.
+The map shows the complete historical network. For readability,
+the original OSM `highway` categories are combined into six
+broader groups. This aggregation is used only for visualisation;
+the original classifications remain available in the dataset
+and in the map popups.
 
 ```{r}
 #| echo: false
@@ -170,95 +208,21 @@ leaflet(roads_ll, options = leafletOptions(preferCanvas = TRUE)) |>
   )
 ```
 
-## Network composition
+The map groups correspond to the following original OSM categories:
 
-Total mapped feature length by OSM road/path category.
+| Map group | Original OSM `highway` categories |
+|---|---|
+| Motor-vehicle road | `residential`, `service`, `unclassified`, `tertiary`, `secondary`, `primary`, `trunk`, `motorway`, and their `_link` variants |
+| Pedestrian street | `pedestrian` |
+| Pedestrian/path | `footway`, `path`, `steps`, `bridleway`, `corridor`, `crossing`, `platform` |
+| Cycleway | `cycleway` |
+| Living street | `living_street` |
+| Other | `track`, `raceway`, `construction`, `road` |
 
-```{r}
-#| echo: false
-
-highway_summary |>
-  slice_max(length_km, n = 15) |>
-  mutate(highway = reorder(highway, length_km)) |>
-  ggplot(aes(x = length_km, y = highway)) +
-  geom_col(fill = "#3973A8") +
-  labs(
-    x = "Mapped length (km)",
-    y = NULL,
-    title = "Network length by OSM highway category"
-  ) +
-  theme_minimal(base_size = 12)
-```
-
-```{r}
-#| echo: false
-
-highway_summary |>
-  mutate(
-    length_km = round(length_km, 2),
-    pct_length = round(pct_length, 1)
-  ) |>
-  DT::datatable(
-    rownames = FALSE,
-    filter = "top",
-    options = list(pageLength = 15)
-  )
-```
-
-## Attribute completeness
-
-The following table compares the proportion of features with
-a recorded attribute against the proportion of mapped length
-covered by those features.
-
-```{r}
-#| echo: false
-
-completeness |>
-  select(
-    attribute,
-    pct_features,
-    pct_length
-  ) |>
-  DT::datatable(
-    rownames = FALSE,
-    options = list(dom = "t", paging = FALSE)
-  )
-```
-
-```{r}
-#| echo: false
-
-completeness |>
-  select(attribute, pct_features, pct_length) |>
-  tidyr::pivot_longer(
-    cols = c(pct_features, pct_length),
-    names_to = "measure",
-    values_to = "percentage"
-  ) |>
-  mutate(
-    measure = recode(
-      measure,
-      pct_features = "By feature count",
-      pct_length = "By mapped length"
-    )
-  ) |>
-  ggplot(
-    aes(
-      x = percentage,
-      y = reorder(attribute, percentage),
-      fill = measure
-    )
-  ) +
-  geom_col(position = "dodge") +
-  labs(
-    x = "Attributes recorded (%)",
-    y = NULL,
-    fill = NULL,
-    title = "Completeness of historical OSM attributes"
-  ) +
-  theme_minimal(base_size = 12)
-```
+These groups are defined for visualisation and do not constitute
+an official OSM classification. The motor-vehicle road group
+does not imply that motor-vehicle access is permitted on every
+segment.
 
 ## Pedestrian infrastructure
 
@@ -294,13 +258,53 @@ leaflet(pedestrian, options = leafletOptions(preferCanvas = TRUE)) |>
     weight = 2,
     opacity = 0.8,
     fill = FALSE
-) |>
+  ) |>
   addLegend(
     position = "bottomright",
     pal = pal,
     values = pedestrian$road_group,
     title = "Pedestrian-related categories"
   )
+```
+
+## Attribute completeness
+
+The following chart compares the proportion of features with
+a recorded attribute against the proportion of mapped length
+covered by those features.
+
+```{r}
+#| echo: false
+
+completeness |>
+  select(attribute, pct_features, pct_length) |>
+  tidyr::pivot_longer(
+    cols = c(pct_features, pct_length),
+    names_to = "measure",
+    values_to = "percentage"
+  ) |>
+  mutate(
+    measure = recode(
+      measure,
+      pct_features = "By feature count",
+      pct_length = "By mapped length"
+    )
+  ) |>
+  ggplot(
+    aes(
+      x = percentage,
+      y = reorder(attribute, percentage),
+      fill = measure
+    )
+  ) +
+  geom_col(position = "dodge") +
+  labs(
+    x = "Attributes recorded (%)",
+    y = NULL,
+    fill = NULL,
+    title = "Completeness of historical OSM attributes"
+  ) +
+  theme_minimal(base_size = 12)
 ```
 
 ## Methodological notes
